@@ -1,0 +1,33 @@
+# 都市の数を受け取る
+n = int(input())
+# 各都市の座標を受け取る
+pos = [list(map(int, input().split())) for i in range(n)]
+
+# 都市間の距離を計算するための配列を初期化
+dist = [[0] * n for _ in range(n)]
+# 都市間の距離を計算
+for u in range(n):
+    for v in range(n):
+        a, b, c = pos[u]
+        p, q, r = pos[v]
+        dist[u][v] = abs(p - a) + abs(q - b) + max(0, r - c)
+
+# dpテーブルを初期化。dp[s][v]は、都市の集合sを訪れていて、最後に都市vにいるときの最短距離
+# スタート地点は都市０とする。最初の時点で最短経路は０。
+dp = [[float("inf")] * n for _ in range(2**n)]
+dp[1][0] = 0
+
+for s in range(1, 2**n):
+    for u in range(n):
+        for v in range(n):
+            # 集合s（今まで訪れた都市）のうち、uに訪れていて、vに訪れていないとき
+            if s >> u & 1 and not s >> v & 1:
+                ns = s | 1 << v #集合sにvを追加
+                dp[ns][v] = min(dp[ns][v], dp[s][u] + dist[u][v])
+
+
+# p[-1]を利用して、都市０に戻る。
+# dp[-1][v]はすべての都市を通って、最後に都市vにいる最短経路。
+# そこからdist[v][0]でv→0に移動する距離を加えた最短経路の最小が答えになる。
+ans = min([dp[-1][v] + dist[v][0] for v in range(n)])
+print(ans)

@@ -1,0 +1,27 @@
+def circumcircle(x1, y1, x2, y2, x3, y3):
+    # クラメルの公式の準備
+    A = x3 - x1
+    B = y3 - y1
+    D = x2 - x1
+    E = y2 - y1
+    C = 0.5 * (x3**2 - x1**2 + y3**2 - y1**2)
+    F = 0.5 * (x2**2 - x1**2 + y2**2 - y1**2)
+
+    # 行列式
+    delta = A*E - B*D
+    if abs(delta) < 1e-12:
+        raise ValueError("3点が一直線上にあるため外接円は求まりません。")
+    delta1 = C*E - B*F
+    delta2 = A*F - C*D
+
+    # 中心座標 (a, b)
+    a = delta1 / delta
+    b = delta2 / delta
+
+    # 半径 r
+    r = ((x1 - a)**2 + (y1 - b)**2)**0.5
+    return a, b, r
+
+
+# 動作テスト
+print(circumcircle(1,2, -3,4, -5,-6))

@@ -1,0 +1,83 @@
+# 時計回り
+rot = [list(x) for x in zip(*A[::-1])]
+
+# 反時計回り
+rot = [list(x) for x in zip(*A)][::-1]
+
+# 添え字で管理
+
+def rotate_ring_once(A, B, i): 
+    """
+    正方行列Aの「i番目のリング(外周からi層目)」を
+    時計回りに90度回転させてBに書き込む。
+    A, B はともに NxN
+    """
+    N = len(A)
+    for x in range(i, N - i):
+        B[x][N - 1 - i]     = A[i][x]           # 上辺 -> 右辺
+        B[N - 1 - i][N - 1 - x] = A[x][N - 1 - i]   # 右辺 -> 下辺
+        B[N - 1 - x][i]             = A[N - 1 - i][N - 1 - x]   # 下辺 -> 左辺
+        B[i][x]     = A[N - 1 - x][i]           # 左辺 -> 上辺
+
+def rotate_ring(A, B, i, n):
+    """
+    正方行列 A の i 番目のリングを時計回りに n 回 (90°単位) 回転させて
+    結果を B に書き込む。
+    A, B は NxN の2次元配列
+    """
+    d = n % 4  # 0〜3 に正規化
+    if d == 0:    # 0回転のときは A→B にコピーするだけでOK
+        for x in range(i, N - i):
+            B[i][x] = A[i][x]                     # 上
+            B[x][N - 1 - i] = A[x][N - 1 - i]     # 右
+            B[N - 1 - i][x] = A[N - 1 - i][x]     # 下
+            B[x][i] = A[x][i]                     # 左
+        return
+    
+    for x in range(i, N - i):
+        if d == 1:# 90°
+            B[x][N - 1 - i]         = A[i][x]
+            B[N - 1 - i][N - 1 - x] = A[x][N - 1 - i]
+            B[N - 1 - x][i]         = A[N - 1 - i][N - 1 - x]
+            B[i][x]                 = A[N - 1 - x][i]
+        elif d == 2:# 180°
+            B[N - 1 - i][N - 1 - x] = A[i][x]
+            B[N - 1 - x][i]         = A[x][N - 1 - i]
+            B[i][x]                 = A[N - 1 - i][N - 1 - x]
+            B[x][N - 1 - i]         = A[N - 1 - x][i]
+        else:# 270°
+            B[N - 1 - x][i]         = A[i][x]
+            B[i][x]                 = A[x][N - 1 - i]
+            B[x][N - 1 - i]         = A[N - 1 - i][N - 1 - x]
+            B[N - 1 - i][N - 1 - x] = A[N - 1 - x][i]
+    return
+
+
+def rotate_with_layer_rotations(A, layer_rot):
+    """
+    A: NxN の2次元配列
+    layer_rot[i]: i番目のリングを何回90°回すか (0〜3)
+
+    戻り値: 回転後の新しい2次元配列 B
+    """
+    N = len(A)
+    B = [row[:] for row in A]
+
+    for i in range(N // 2):
+        k = layer_rot[i] % 4
+        if k == 0:
+            continue
+
+        for _ in range(k):
+            # A -> B に1回分の回転を書き込む
+            for x in range(i, N - i):
+                B[x][N - 1 - i]     = A[i][x]           # 上辺 -> 右辺
+                B[N - 1 - i][N - 1 - x] = A[x][N - 1 - i]   # 右辺 -> 下辺
+                B[N - 1 - x][i]             = A[N - 1 - i][N - 1 - x]   # 下辺 -> 左辺
+                B[i][x]     = A[N - 1 - x][i]           # 左辺 -> 上辺
+
+            # 次の回転のために A <-> B を入れ替える
+            A, B = B, A
+
+    return A
+

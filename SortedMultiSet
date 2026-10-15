@@ -1,0 +1,374 @@
+# https://github.com/tatyam-prime/SortedSet/blob/main/SortedMultiset.py
+# range_sumを加えたものは下にある（ほぼ変わらないが若干add,discard,popが遅くなっている）
+import math
+from bisect import bisect_left, bisect_right
+from typing import Generic, Iterable, Iterator, List, Tuple, TypeVar, Optional
+T = TypeVar('T')
+
+class SortedMultiset(Generic[T]):
+    BUCKET_RATIO = 16
+    SPLIT_RATIO = 24
+    
+    def __init__(self, a: Iterable[T] = []) -> None:
+        "Make a new SortedMultiset from iterable. / O(N) if sorted / O(N log N)"
+        a = list(a)
+        n = self.size = len(a)
+        if any(a[i] > a[i + 1] for i in range(n - 1)):
+            a.sort()
+        bucket_size = int(math.ceil(math.sqrt(n / self.BUCKET_RATIO)))
+        self.a = [a[n * i // bucket_size : n * (i + 1) // bucket_size] for i in range(bucket_size)]
+
+    def __iter__(self) -> Iterator[T]:
+        for i in self.a:
+            for j in i: yield j
+
+    def __reversed__(self) -> Iterator[T]:
+        for i in reversed(self.a):
+            for j in reversed(i): yield j
+    
+    def __eq__(self, other) -> bool:
+        return list(self) == list(other)
+    
+    def __len__(self) -> int:
+        return self.size
+    
+    def __repr__(self) -> str:
+        return "SortedMultiset" + str(self.a)
+    
+    def __str__(self) -> str:
+        s = str(list(self))
+        return "{" + s[1 : len(s) - 1] + "}"
+
+    def _position(self, x: T) -> Tuple[List[T], int, int]:
+        "return the bucket, index of the bucket and position in which x should be. self must not be empty."
+        for i, a in enumerate(self.a):
+            if x <= a[-1]: break
+        return (a, i, bisect_left(a, x))
+
+    def __contains__(self, x: T) -> bool:
+        if self.size == 0: return False
+        a, _, i = self._position(x)
+        return i != len(a) and a[i] == x
+
+    def count(self, x: T) -> int:
+        "Count the number of x."
+        return self.index_right(x) - self.index(x)
+
+    def add(self, x: T) -> None:
+        "Add an element. / O(√N)"
+        if self.size == 0:
+            self.a = [[x]]
+            self.size = 1
+            return
+        a, b, i = self._position(x)
+        a.insert(i, x)
+        self.size += 1
+        if len(a) > len(self.a) * self.SPLIT_RATIO:
+            mid = len(a) >> 1
+            self.a[b:b+1] = [a[:mid], a[mid:]]
+    
+    def _pop(self, a: List[T], b: int, i: int) -> T:
+        ans = a.pop(i)
+        self.size -= 1
+        if not a: del self.a[b]
+        return ans
+
+    def discard(self, x: T) -> bool:
+        "Remove an element and return True if removed. / O(√N)"
+        if self.size == 0: return False
+        a, b, i = self._position(x)
+        if i == len(a) or a[i] != x: return False
+        self._pop(a, b, i)
+        return True
+
+    def lt(self, x: T) -> Optional[T]:
+        "Find the largest element < x, or None if it doesn't exist."
+        for a in reversed(self.a):
+            if a[0] < x:
+                return a[bisect_left(a, x) - 1]
+
+    def le(self, x: T) -> Optional[T]:
+        "Find the largest element <= x, or None if it doesn't exist."
+        for a in reversed(self.a):
+            if a[0] <= x:
+                return a[bisect_right(a, x) - 1]
+
+    def gt(self, x: T) -> Optional[T]:
+        "Find the smallest element > x, or None if it doesn't exist."
+        for a in self.a:
+            if a[-1] > x:
+                return a[bisect_right(a, x)]
+
+    def ge(self, x: T) -> Optional[T]:
+        "Find the smallest element >= x, or None if it doesn't exist."
+        for a in self.a:
+            if a[-1] >= x:
+                return a[bisect_left(a, x)]
+    
+    def __getitem__(self, i: int) -> T:
+        "Return the i-th element."
+        if i < 0:
+            for a in reversed(self.a):
+                i += len(a)
+                if i >= 0: return a[i]
+        else:
+            for a in self.a:
+                if i < len(a): return a[i]
+                i -= len(a)
+        raise IndexError
+    
+    def pop(self, i: int = -1) -> T:
+        "Pop and return the i-th element."
+        if i < 0:
+            for b, a in enumerate(reversed(self.a)):
+                i += len(a)
+                if i >= 0: return self._pop(a, ~b, i)
+        else:
+            for b, a in enumerate(self.a):
+                if i < len(a): return self._pop(a, b, i)
+                i -= len(a)
+        raise IndexError
+
+    def index(self, x: T) -> int:
+        "Count the number of elements < x."
+        ans = 0
+        for a in self.a:
+            if a[-1] >= x:
+                return ans + bisect_left(a, x)
+            ans += len(a)
+        return ans
+
+    def index_right(self, x: T) -> int:
+        "Count the number of elements <= x."
+        ans = 0
+        for a in self.a:
+            if a[-1] > x:
+                return ans + bisect_right(a, x)
+            ans += len(a)
+        return ans
+
+    
+# ssm = SortedMultiset([])
+# ssm.add(0)
+# print(ssm)
+
+
+# import math
+# from bisect import bisect_left, bisect_right
+# from typing import Generic, Iterable, Iterator, List, Tuple, TypeVar, Optional
+
+# T = TypeVar('T')
+
+# class SortedMultiset(Generic[T]):
+#     BUCKET_RATIO = 16
+#     SPLIT_RATIO = 24
+    
+#     def __init__(self, a: Iterable[T] = []) -> None:
+#         """
+#         Make a new SortedMultiset from iterable.
+#         / O(N) if sorted / O(N log N)
+#         """
+#         a = list(a)
+#         n = self.size = len(a)
+#         if n == 0:
+#             self.a: List[List[T]] = []
+#             self.sum: List[int] = []
+#             self.total_sum = 0
+#             return
+
+#         if any(a[i] > a[i + 1] for i in range(n - 1)):
+#             a.sort()
+
+#         bucket_size = int(math.ceil(math.sqrt(n / self.BUCKET_RATIO)))
+#         self.a = [a[n * i // bucket_size : n * (i + 1) // bucket_size] for i in range(bucket_size)]
+
+#         self.sum: List[int] = [sum(b) for b in self.a]
+#         self.total_sum: int = sum(self.sum)
+
+#     def __iter__(self) -> Iterator[T]:
+#         for b in self.a:
+#             for x in b:
+#                 yield x
+
+#     def __reversed__(self) -> Iterator[T]:
+#         for b in reversed(self.a):
+#             for x in reversed(b):
+#                 yield x
+    
+#     def __eq__(self, other) -> bool:
+#         return list(self) == list(other)
+    
+#     def __len__(self) -> int:
+#         return self.size
+    
+#     def __repr__(self) -> str:
+#         return "SortedMultiset" + str(self.a)
+    
+#     def __str__(self) -> str:
+#         s = str(list(self))
+#         return "{" + s[1 : len(s) - 1] + "}"
+
+#     def _position(self, x: T) -> Tuple[List[T], int, int]:
+#         """
+#         return (bucket, bucket_index, index_in_bucket) where x should be inserted.
+#         self must not be empty.
+#         """
+#         for i, a in enumerate(self.a):
+#             if x <= a[-1]:
+#                 return (a, i, bisect_left(a, x))
+#         a = self.a[-1]
+#         i = len(self.a) - 1
+#         return (a, i, len(a))
+
+#     def __contains__(self, x: T) -> bool:
+#         if self.size == 0:
+#             return False
+#         a, _, i = self._position(x)
+#         return i != len(a) and a[i] == x
+
+#     def count(self, x: T) -> int:
+#         "Count the number of x."
+#         return self.index_right(x) - self.index(x)
+
+#     def add(self, x: T) -> None:
+#         "Add an element. / O(√N)"
+#         if self.size == 0:
+#             self.a = [[x]]
+#             self.sum = [x]
+#             self.total_sum = x
+#             self.size = 1
+#             return
+
+#         a, b, i = self._position(x)
+#         a.insert(i, x)
+#         self.sum[b] += x
+#         self.total_sum += x
+#         self.size += 1
+
+#         if len(a) > len(self.a) * self.SPLIT_RATIO:
+#             mid = len(a) >> 1
+#             left = a[:mid]
+#             right = a[mid:]
+#             self.a[b:b+1] = [left, right]
+#             self.sum[b:b+1] = [sum(left), sum(right)]
+
+#     def _pop(self, a: List[T], b: int, i: int) -> T:
+#         ans = a.pop(i)
+#         self.size -= 1
+#         self.sum[b] -= ans
+#         self.total_sum -= ans
+#         if not a:
+#             del self.a[b]
+#             del self.sum[b]
+#         return ans
+
+#     def discard(self, x: T) -> bool:
+#         "Remove an element and return True if removed. / O(√N)"
+#         if self.size == 0:
+#             return False
+#         a, b, i = self._position(x)
+#         if i == len(a) or a[i] != x:
+#             return False
+#         self._pop(a, b, i)
+#         return True
+
+#     def lt(self, x: T) -> Optional[T]:
+#         "Find the largest element < x, or None if it doesn't exist."
+#         for a in reversed(self.a):
+#             if a and a[0] < x:
+#                 return a[bisect_left(a, x) - 1]
+
+#     def le(self, x: T) -> Optional[T]:
+#         "Find the largest element <= x, or None if it doesn't exist."
+#         for a in reversed(self.a):
+#             if a and a[0] <= x:
+#                 return a[bisect_right(a, x) - 1]
+
+#     def gt(self, x: T) -> Optional[T]:
+#         "Find the smallest element > x, or None if it doesn't exist."
+#         for a in self.a:
+#             if a and a[-1] > x:
+#                 return a[bisect_right(a, x)]
+
+#     def ge(self, x: T) -> Optional[T]:
+#         "Find the smallest element >= x, or None if it doesn't exist."
+#         for a in self.a:
+#             if a and a[-1] >= x:
+#                 return a[bisect_left(a, x)]
+
+#     def __getitem__(self, i: int) -> T:
+#         "Return the i-th element (0-index)."
+#         if i < 0:
+#             i += self.size
+#         if i < 0 or i >= self.size:
+#             raise IndexError
+#         for a in self.a:
+#             if i < len(a):
+#                 return a[i]
+#             i -= len(a)
+#         raise IndexError
+    
+#     def pop(self, i: int = -1) -> T:
+#         "Pop and return the i-th element."
+#         if self.size == 0:
+#             raise IndexError
+#         if i < 0:
+#             i += self.size
+#         if i < 0 or i >= self.size:
+#             raise IndexError
+#         for b, a in enumerate(self.a):
+#             if i < len(a):
+#                 return self._pop(a, b, i)
+#             i -= len(a)
+#         raise IndexError
+
+#     def index(self, x: T) -> int:
+#         "Count the number of elements < x."
+#         ans = 0
+#         for a in self.a:
+#             if a[-1] >= x:
+#                 return ans + bisect_left(a, x)
+#             ans += len(a)
+#         return ans
+
+#     def index_right(self, x: T) -> int:
+#         "Count the number of elements <= x."
+#         ans = 0
+#         for a in self.a:
+#             if a[-1] > x:
+#                 return ans + bisect_right(a, x)
+#             ans += len(a)
+#         return ans
+
+#     def sum_prefix(self, k: int) -> int:
+#         """
+#         小さい方から k 個の総和（インデックス [0, k)）。
+#         k <= 0 なら 0, k >= size なら全体の総和。
+#         """
+#         if k <= 0:
+#             return 0
+#         if k >= self.size:
+#             return self.total_sum
+#         res = 0
+#         for a, s in zip(self.a, self.sum):
+#             if k >= len(a):
+#                 res += s
+#                 k -= len(a)
+#             else:
+#                 # このバケットの前から k 個だけ取る
+#                 for x in a[:k]:
+#                     res += x
+#                 break
+#         return res
+
+#     def sum_range(self, l: int, r: int) -> int:
+#         """
+#         インデックス区間 [l, r) の総和（0-index, 半開区間）。
+#         範囲外を渡した場合の挙動は未定義（コンテスト用なら呼び出し側で保証するのが楽）。
+#         """
+#         # 必要なら clamp してもよい:
+#         # l = max(l, 0)
+#         # r = min(r, self.size)
+#         # if l >= r: return 0
+#         return self.sum_prefix(r) - self.sum_prefix(l)
+

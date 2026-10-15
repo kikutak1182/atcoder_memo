@@ -1,0 +1,15 @@
+
+def run_length(l):
+    """
+    ランレングス圧縮
+    入力: イテラブル l（例: 整数配列や文字列）
+    出力: [(値, 連続数), ...]
+    """
+    res = []
+    for ch in l:
+        if not res or res[-1][0] != ch:
+            res.append([ch, 1])
+        else:
+            res[-1][1] += 1
+    # (値, 連続数) のタプルで返したい場合は下を使う
+    return [tuple(x) for x in res]

@@ -1,0 +1,101 @@
+# https://qiita.com/tonomotohide/items/b2141da9dcb0a04ae3fe 一部改変
+
+from collections import deque
+
+class ManagedTree():
+    '''
+    木構造に対して
+    ・2頂点間の距離を求める
+    ・ダブリングにより木の共通祖先(LCA)を求める
+    ことを可能にする
+    '''
+    def __init__(self, root_node , edge):
+        n = len(edge)                                       # n         : 木に含まれる頂点数
+        self.dist = [-1] * n                                # dist[i]   : i⇔根の距離
+        self.upstream_node = [list() for i in range(n)]   # upstream_node[i][j] : 頂点i の 2**j 上流側の頂点
+
+        # 1. 幅優先探索で根からの距離と1段上流側の頂点を求めておく
+        search_deq = deque([root_node])                     # 探索候補一覧
+        self.dist[root_node] = 0
+        self.upstream_node[root_node].append(root_node)
+
+        while len(search_deq) != 0:
+            i = search_deq.popleft()
+
+            for j in edge[i]:
+                if self.dist[j] == -1:
+                    self.dist[j] = self.dist[i] + 1         # 全マス間距離1の場合。問題によって変えること
+                    self.upstream_node[j].append(i)
+                    search_deq.append(j)
+
+        # 2. ダブリングを用いて 2**k 段上流側の頂点を求める
+        max_dist = max(self.dist)
+
+        j = 0
+
+        while 1:
+            for i in range(n):
+                via_node = self.upstream_node[i][j]               # iから 2**j 段上流側の頂点
+                reached_node = self.upstream_node[via_node][j]    # iから 2**j 上流側の頂点からさらに　2**j 段上流側の頂点 = iから 2**j + 2**j = 2 * 2**j = 2**(j+1) 段上流側の頂点
+                self.upstream_node[i].append(reached_node)
+
+            if 2**j >= max_dist:
+                self.bit_len = j + 1    # 根⇔最深部の頂点の距離を2進数で表す際に必要なビット長
+                break
+
+            j += 1
+
+    def get_upstream_node(self, n, k):
+        # 頂点n の k段上流側の頂点 を求める
+        if k == 0:
+            return n
+        else:
+            for j in range(self.bit_len):
+                if k & (1<<j):
+                    n = self.upstream_node[n][j]
+            return n
+
+    def get_LCA(self, a, b):
+        # 頂点a,b の LCA を求める
+        # 1. 深い方の頂点を変更して、根からの距離を同じにする
+        if self.dist[a] == self.dist[b]:
+            d = 0
+        else:
+            if self.dist[a] > self.dist[b]:
+                pass
+            elif self.dist[a] < self.dist[b]:
+                # 深い方の頂点をaとして扱う。
+                b,a = a,b
+
+            d = self.dist[a] - self.dist[b]
+
+            for j in range(self.bit_len):
+                if d & (1<<j):
+                    a = self.upstream_node[a][j]
+
+        if a == b:
+            return a
+        else:
+            # 2. 二分探索を用いて、a,bの頂点から何段上がれば共通の頂点(LCA)となるかを求める
+            maxi , mini = self.dist[a] , 0
+
+            while 1:
+                if maxi - mini <= 4:
+                    for i in range(mini,maxi+1):
+                        if self.get_upstream_node(a,i) == self.get_upstream_node(b,i):
+                            return self.get_upstream_node(a,i)
+                else:
+                    mid = (maxi+mini) // 2        #int((max+min)//2)だと浮動小数点を介して、誤差になるので注意
+
+                    if self.get_upstream_node(a,mid) == self.get_upstream_node(b,mid):
+                        # mid 段上流側の頂点は一致したので、LCAはそれより下流にある
+                        maxi = mid
+                    else:
+                        # mid 段上流側の頂点が不一致したので、LCAはそれより上流にある
+                        mini = mid
+
+    def get_dist(self, a, b):
+        # 頂点a,b の 距離 を求める
+        LCA = self.get_LCA(a, b)
+        return self.dist[a] - self.dist[LCA] + self.dist[b] - self.dist[LCA]
+

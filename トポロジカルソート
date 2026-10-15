@@ -1,0 +1,37 @@
+# 問題設定
+N, M = map(int, input().split())
+# グラフを表すmatrix g : 
+#   任意の頂点aに対してg[a]はaから矢印が向いている頂点を指す
+g = [list()for _ in range(N)]
+deg = [0] * N
+for _ in range(M):
+  a, b = map(int, input().split())
+  a -= 1
+  b -= 1
+  g[a].append(b)
+  deg[b] += 1
+
+import heapq
+
+q = []
+# 入次数が0のものを候補として入れる
+for i in range(N):
+  if deg[i] == 0:
+    heapq.heappush(q, i)
+
+ans = []
+while len(ans) < N:
+  # 非巡回グラフであることを確認する
+  if len(q) == 0:
+    print(-1)
+    exit()
+  # 最も小さい値を取ってくる
+  x = heapq.heappop(q)
+  ans.append(x + 1)
+  # 現在追加したもので x=A_i ->　+ B_i の関係を見る
+  for y in g[x]:
+    deg[y] -= 1
+    if deg[y] == 0:
+      heapq.heappush(q, y)
+
+print(*ans)

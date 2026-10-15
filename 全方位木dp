@@ -1,0 +1,173 @@
+# ================== RerootingDP (Python) ==================
+# - 無向木を想定
+# - 競プロ向け：非再帰・O(N)
+# - API: add_edge(u, v, idx, xdi) / build(root) / reroot()
+# - コールバック:
+#     merge(E, E) -> E          : 子方向の寄与Eを畳み込む（結合法則）
+#     e() -> E                  : mergeの単位元
+#     put_edge(V, edge_idx) -> E: 隣へ渡すときVをEへ写像（辺方向の情報が必要なときに使う）
+#     put_vertex(E, v) -> V     : 頂点vの最終値をEから仕上げる
+
+import sys
+
+class RerootingDP:
+    def __init__(self, n, merge, e, put_edge, put_vertex):
+        self.n = n
+        self.merge = merge
+        self.e = e
+        self.put_edge = put_edge
+        self.put_vertex = put_vertex
+        # 隣接: (to, edge_idx) で保持（xdiは不要：無向なら同じidで十分）
+        self.G = [[] for _ in range(n)]
+        self._built = False
+        self._root = 0
+
+    def add_edge(self, u, v, idx, xdi):
+        # 無向なので両方向に追加。C++版の idx/xdi を受け取れるようにしていますが、
+        # 通常は idx==xdi にしておけばOK（本ライブラリでは idx を使用）
+        self.G[u].append((v, idx))
+        self.G[v].append((u, xdi))
+
+    def build(self, root=0):
+        """ 下向きDP（subdp）を作る。戻り値: subdp(=V) の配列 """
+        self._root = root
+        n = self.n
+        G = self.G
+        e = self.e
+        merge = self.merge
+        put_edge = self.put_edge
+        put_vertex = self.put_vertex
+
+        # ---- 1) 親配列と順序（非再帰DFS）
+        parent = [-1]*n
+        order = []
+        st = [root]
+        parent[root] = root
+        while st:
+            v = st.pop()
+            order.append(v)
+            for to, _eid in G[v]:
+                if to == parent[v]:
+                    continue
+                parent[to] = v
+                st.append(to)
+
+        # ---- 2) ポストオーダーで subdp を計算
+        subdp = [None]*n  # V
+        # child_contrib[v] に「子方向から v へ来る寄与 E」を保持（rerootで再利用）
+        child_contrib = [[] for _ in range(n)]  # list[E] (親方向は入れない)
+
+        for v in reversed(order):
+            acc = e()  # E
+            for to, eid in G[v]:
+                if to == parent[v]:
+                    continue
+                # 子 to を根にした最終値 V を E に変換して取り込む
+                e_from_child = put_edge(subdp[to], eid)  # E
+                child_contrib[v].append(e_from_child)
+                acc = merge(acc, e_from_child)
+            subdp[v] = put_vertex(acc, v)
+
+        # reroot 用に内部保持
+        self._parent = parent
+        self._order = order
+        self._subdp = subdp
+        self._child_contrib = child_contrib
+        self._built = True
+        return subdp
+
+    def reroot(self):
+        """ 全方位化して answers(=V) を返す """
+        assert self._built, "call build(root) first"
+        n = self.n
+        G = self.G
+        e = self.e
+        merge = self.merge
+        put_edge = self.put_edge
+        put_vertex = self.put_vertex
+        parent = self._parent
+        order = self._order
+        subdp = self._subdp
+
+        # 親方向からの寄与（E）
+        up = [e()]*n
+        answers = [None]*n  # V
+
+        # root から順に、prefix/suffix を用いて up を子へ配る
+        for v in order:
+            # v に隣接する各方向から v へ来る「寄与E」を並べる
+            deg = len(G[v])
+            contrib = [None]*deg  # E
+            for i, (to, eid) in enumerate(G[v]):
+                if to == parent[v]:
+                    # 親方向の寄与は up[v] を使用
+                    contrib[i] = up[v]
+                else:
+                    # 子 to 側からの寄与
+                    contrib[i] = put_edge(subdp[to], eid)
+
+            # v を根にした最終値 V
+            acc = e()
+            for x in contrib:
+                acc = merge(acc, x)
+            answers[v] = put_vertex(acc, v) #ここがansとなる（i!=j制約などはここで含めると良い）
+
+            # prefix/suffix で「to を除いた合成」をO(1)で作る
+            pref = [e()]*(deg+1)
+            for i in range(deg):
+                pref[i+1] = merge(pref[i], contrib[i])
+            suf = [e()]*(deg+1)
+            for i in range(deg-1, -1, -1):
+                suf[i] = merge(contrib[i], suf[i+1])
+
+            # 各子へ up を配る
+            for i, (to, eid) in enumerate(G[v]):
+                if to == parent[v]:
+                    continue
+                # v における「to を除いた全方向の寄与」を合成
+                without_to = merge(pref[i], suf[i+1])  # E
+                # それを「v を根に置いた頂点値 V」に仕上げてから、辺で子方向へ送る
+                #   1) put_vertex: E -> V（v基準の仕上げ）
+                #   2) put_edge  : V -> E（to方向へ送る寄与）
+                v_as_root = put_vertex(without_to, v)  # V
+                up[to] = put_edge(v_as_root, eid)      # E
+
+        return answers
+# ================== /RerootingDP ==================
+
+def merge(a, b):
+    # 辺aと辺bの結果をマージする
+    return max(a, b)
+
+def e():
+    # 単位元、「必ず負ける値」
+    return -inf
+
+def put_edge(v, e_id): # (頂点の値, 有向辺のindex)
+    # 頂点で完成した値vを、辺edge_idをまたいで渡す
+    return v + 1
+
+def put_vertex(E_merge, v_id): # (頂点vに入ってくる全方向の寄与Eをmergeした値, 頂点のindex)
+    # vの最終答えを仕上げる ここで各頂点の初期化できる(単位元は-infだが、頂点は0を持つ)
+    return max(E_merge, 0)
+
+
+N = int(input())
+rr = RerootingDP(
+    n=N,
+    merge=merge,
+    e=e,
+    put_edge=put_edge,
+    put_vertex=put_vertex
+)
+for i in range(N-1):
+    a, b = map(int, input().split())
+    # idx/xdi はこの用途では同じでOK（無向・未使用）
+    # 有向辺の場合u->vへの辺番号がidx,v->uへの辺番号がxdiである
+    rr.add_edge(a-1, b-1, idx=i, xdi=i)
+
+rr.build(0) # dfs(v,v)を返す
+ans = rr.reroot()  # 長さnのans配列を返す
+print(max(ans)+1)
+
+    

@@ -1,0 +1,11 @@
+from itertools import combinations, permutations
+
+def generate_combinations(elements, r):
+    """Generate all combinations of r elements from the input list."""
+    return list(combinations(elements, r))
+
+import math
+print(math.factorial(5))  # 階乗計算（非整数、負の値はエラー）
+math.perm(n, k) # 順列計算（非整数、負の値はエラー）
+math.comb(n, k) # 組み合わせ計算（非整数、負の値はエラー）
+

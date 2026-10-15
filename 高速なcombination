@@ -1,0 +1,44 @@
+# 階乗・逆階乗を前計算しておくやつ
+mod = 998244353
+MAX = 10 ** 6
+
+fact = [1] * (MAX + 1)
+inv_fact = [1] * (MAX + 1)
+
+for i in range(1, MAX + 1):
+    fact[i] = fact[i - 1] * i % mod
+
+inv_fact[MAX] = pow(fact[MAX], mod - 2, mod)
+
+for i in range(MAX, 0, -1):
+    inv_fact[i - 1] = inv_fact[i] * i % mod
+
+def combi(n, k):
+    if k < 0 or k > n:
+        return 0
+    return fact[n] * inv_fact[k] % mod * inv_fact[n - k] % mod
+
+
+
+# nが大きくてもいいやつ　O(k)
+# https://linus-mk.hatenablog.com/entry/2020/02/23/225258
+n = 10 ** 9
+k = 2 * 10 ** 5
+mod = 998244353
+# xの逆元を求める。フェルマーの小定理より、 x の逆元は x ^ (mod - 2) に等しい。計算時間はO(log(mod))程度。
+def modinv(x):
+    return pow(x, mod - 2, mod)
+
+def combi(n, k):
+    numera = 1  # 分子
+    denomi = 1  # 分母
+
+    for i in range(k):
+        numera *= n-i
+        numera %= mod
+        denomi *= i+1
+        denomi %= mod
+    return numera * modinv(denomi) % mod
+
+
+

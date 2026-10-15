@@ -1,0 +1,156 @@
+# AtCoder 用に想定した行列クラス（int / MOD付き）
+# 必要に応じて MOD を問題に合わせて書き換えてください。
+MOD = 998244353
+
+
+class Mat:
+    __slots__ = ("n", "m", "a")
+
+    # n×m行列を0初期化して生成する（m省略時は正方行列）。
+    # 計算量: O(n*m)
+    def __init__(self, n, m=None, ident=False, data=None):
+        if data is not None:
+            self.n = len(data)
+            self.m = len(data[0]) if self.n > 0 else 0
+            # deepcopyなしの高速コピー（破壊されたくなければ row[:] に変更可）
+            self.a = [row[:] for row in data]
+            return
+
+        if m is None:
+            m = n
+        self.n = n
+        self.m = m
+        self.a = [[0] * m for _ in range(n)]
+        if ident:
+            for i in range(n):
+                self.a[i][i] = 1
+
+    # 単位行列 I(n) を返す。
+    # 使い方: I = Mat.eye(n)
+    # 計算量: O(n)
+    @staticmethod
+    def eye(n):
+        return Mat(n, n, ident=True)
+    
+    @staticmethod
+    def from_list(data):
+        """2D配列 → Mat へ変換（使い方: M = Mat.from_list(A)）"""
+        return Mat(0, data=data)
+
+    # 要素アクセス: M[i][j] の i 行目を返す（list を返す）。
+    # 計算量: O(1)
+    def __getitem__(self, i):
+        return self.a[i]
+
+    # 行列積: self * other を新しい行列として返す。
+    # 使い方: C = A.mul(B)
+    # 計算量: O(n * p * m)  (self: n×p, other: p×m)
+    def mul(self, other):
+        assert self.m == other.n
+        n = self.n
+        p = self.m
+        m = other.m
+        A = self.a
+        B = other.a
+        C = [[0] * m for _ in range(n)]
+
+        # 三重ループだが、ループ順やローカル変数で少し高速化。
+        for i in range(n):
+            Ci = C[i]
+            Ai = A[i]
+            for k in range(p):
+                aik = Ai[k]
+                if aik == 0:
+                    continue
+                Bk = B[k]
+                # Ci[j] += aik * Bk[j]
+                for j in range(m):
+                    Ci[j] = (Ci[j] + aik * Bk[j]) % MOD
+        res = Mat(n, m)
+        res.a = C
+        return res
+
+    # 演算子オーバーロード: A * B で行列積。
+    # 計算量: mul と同じ O(n*p*m)
+    def __mul__(self, other):
+        return self.mul(other)
+
+    # 行列累乗: self^e を返す（正方行列 & e >= 0 前提）。
+    # 使い方: B = A.pow(e) または B = (A ** e)
+    # 計算量: O(n^3 * log e)
+    def pow(self, e):
+        assert self.n == self.m
+        n = self.n
+        # res = I, base = self
+        res = Mat.eye(n)
+        base = Mat(n, n)
+        # base に self.a をコピー
+        base.a = [row[:] for row in self.a]
+
+        while e > 0:
+            if e & 1:
+                res = res.mul(base)
+            base = base.mul(base)
+            e >>= 1
+        return res
+
+    # 演算子オーバーロード: A ** e で行列累乗。
+    # 計算量: pow と同じ O(n^3 * log e)
+    def __pow__(self, e):
+        return self.pow(e)
+
+    # 行列式（MOD 上での値）をガウス消去法で求める（正方行列）。
+    # 使い方: det = A.det()
+    # 計算量: O(n^3)
+    def det(self):
+        assert self.n == self.m
+        n = self.n
+        # B に a をコピー（破壊しないため）
+        B = [row[:] for row in self.a]
+        det = 1
+        for i in range(n):
+            # pivot 探索
+            pivot = -1
+            for r in range(i, n):
+                if B[r][i] % MOD != 0:
+                    pivot = r
+                    break
+            if pivot == -1:
+                return 0
+            if pivot != i:
+                B[i], B[pivot] = B[pivot], B[i]
+                det = (-det) % MOD
+            v = B[i][i] % MOD
+            det = det * v % MOD
+            inv_v = pow(v, MOD - 2, MOD)  # v の逆元
+
+            # 行 i を正規化
+            row_i = B[i]
+            for j in range(i, n):
+                row_i[j] = row_i[j] * inv_v % MOD
+
+            # 下の行を掃き出し
+            for r in range(i + 1, n):
+                row_r = B[r]
+                factor = row_r[i] % MOD
+                if factor == 0:
+                    continue
+                for c in range(i, n):
+                    row_r[c] = (row_r[c] - factor * row_i[c]) % MOD
+        return det
+
+    # 簡易表示: print(M) で行列を出力（デバッグ用途）。
+    # 計算量: O(n*m)
+    def __str__(self):
+        return "\n".join("[" + " ".join(map(str, row)) + "]" for row in self.a)
+
+# ===== 使用例（AtCoder想定のコメント） =====
+# A = Mat(2, 2)                  # 2×2 の 0 行列（O(1) 〜 O(n^2)）
+# A[0][0] = 1; A[0][1] = 2
+# A[1][0] = 3; A[1][1] = 4
+#
+# A = Mat.from_list(A)           # 二次元配列からMatオブジェクトへ直接変換   
+# B = Mat.eye(2)                 # 2×2 の単位行列（O(n)）
+# C = A * B                      # 行列積（O(n^3)）
+# D = A ** 10                    # 行列累乗（O(n^3 log 10)）
+# detA = A.det()                 # 行列式（MOD 上）（O(n^3)）

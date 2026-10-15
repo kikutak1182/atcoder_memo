@@ -1,0 +1,304 @@
+from typing import Any, Callable, List, Optional, Union, Iterator
+
+class LazySegTree:
+    """
+    ACL LazySegTree 互換の Python 実装（atcoder._bit を使わない自前版）
+    - 0-indexed
+    - 区間は半開区間 [l, r)
+    - ジェネリック: 値の型S、作用の型Fは任意（op/mapping/composition次第）
+    """
+    # -------- utilities --------
+    @staticmethod
+    def _ceil_pow2(n: int) -> int:
+        """最小の k s.t. (1<<k) >= n を返す"""
+        if n <= 1:return 0
+        n -= 1
+        k = 0
+        while n > 0:
+            n >>= 1
+            k += 1
+        return k
+    def __init__(
+        self,
+        op: Callable[[Any, Any], Any],             # S × S -> S
+        e: Any,                                    # S（単位元）
+        mapping: Callable[[Any, Any], Any],        # F × S -> S
+        composition: Callable[[Any, Any], Any],    # F × F -> F
+        id_: Any,                                  # F（作用の単位元）
+        v: Union[int, List[Any]],                  # 初期配列 or 長さ
+    ) -> None:
+        self._op = op
+        self._e = e
+        self._mapping = mapping
+        self._composition = composition
+        self._id = id_
+        if isinstance(v, int):
+            v = [e] * v
+        self._n = len(v)
+        self._log = self._ceil_pow2(self._n) if self._n else 0
+        self._size = 1 << self._log if self._n else 1
+        self._d = [e] * (2 * self._size)
+        self._lz = [self._id] * self._size
+        for i in range(self._n):self._d[self._size + i] = v[i]
+        for i in range(self._size - 1, 0, -1):self._update(i)
+    def set(self, p: int, x: Any) -> None: # 位置pに値xをセット O(logN)
+        assert 0 <= p < self._n
+        p += self._size
+        for i in range(self._log, 0, -1):self._push(p >> i)
+        self._d[p] = x
+        for i in range(1, self._log + 1):self._update(p >> i)
+    def get(self, p: int) -> Any: # 位置pの値を取得 O(logN)
+        assert 0 <= p < self._n
+        p += self._size
+        for i in range(self._log, 0, -1):self._push(p >> i)
+        return self._d[p]
+    def prod(self, left: int, right: int) -> Any:# 区間[l,r)の値を取得 O(logN)
+        assert 0 <= left <= right <= self._n
+        if left == right:return self._e
+        left += self._size
+        right += self._size
+        for i in range(self._log, 0, -1):
+            if ((left >> i) << i) != left:self._push(left >> i)
+            if ((right >> i) << i) != right:self._push((right - 1) >> i)
+        sml = self._e
+        smr = self._e
+        while left < right:
+            if left & 1:
+                sml = self._op(sml, self._d[left])
+                left += 1
+            if right & 1:
+                right -= 1
+                smr = self._op(self._d[right], smr)
+            left >>= 1
+            right >>= 1
+        return self._op(sml, smr)
+    def all_prod(self) -> Any: # 全区間の合成値を取得 O(1)
+        return self._d[1] if self._n else self._e
+    def apply(self, left: int, right: Optional[int] = None, f: Optional[Any] = None) -> None: # 区間[l,r)にxを適用 O(logN) rを指定しないと1点更新になる
+        assert f is not None
+        if right is None:
+            # 点適用
+            p = left
+            assert 0 <= p < self._n
+            p += self._size
+            for i in range(self._log, 0, -1):self._push(p >> i)
+            self._d[p] = self._mapping(f, self._d[p])
+            for i in range(1, self._log + 1):self._update(p >> i)
+            return
+        # 区間適用
+        assert 0 <= left <= right <= self._n
+        if left == right:
+            return
+        left += self._size
+        right += self._size
+        for i in range(self._log, 0, -1):
+            if ((left >> i) << i) != left:self._push(left >> i)
+            if ((right >> i) << i) != right:self._push((right - 1) >> i)
+        l2, r2 = left, right
+        while left < right:
+            if left & 1:
+                self._all_apply(left, f)
+                left += 1
+            if right & 1:
+                right -= 1
+                self._all_apply(right, f)
+            left >>= 1
+            right >>= 1
+        left, right = l2, r2
+        for i in range(1, self._log + 1):
+            if ((left >> i) << i) != left:self._update(left >> i)
+            if ((right >> i) << i) != right:self._update((right - 1) >> i)
+    def max_right(self, left: int, g: Callable[[Any], bool]) -> int: # 区間[l,n)でg(prod(left, x))がtrueな最大の右端を求める O(logN)
+        assert 0 <= left <= self._n
+        assert g(self._e)
+        if left == self._n:return self._n
+        left += self._size
+        for i in range(self._log, 0, -1):self._push(left >> i)
+        sm = self._e
+        first = True
+        while first or (left & -left) != left:
+            first = False
+            while left % 2 == 0:left >>= 1
+            if not g(self._op(sm, self._d[left])):
+                while left < self._size:
+                    self._push(left)
+                    left *= 2
+                    if g(self._op(sm, self._d[left])):
+                        sm = self._op(sm, self._d[left])
+                        left += 1
+                return left - self._size
+            sm = self._op(sm, self._d[left])
+            left += 1
+        return self._n
+    def min_left(self, right: int, g: Callable[[Any], bool]) -> int: # 区間(0,r]でg(prod(left, x))がtrueな最小の左端を求める O(logN)
+        assert 0 <= right <= self._n
+        assert g(self._e)
+        if right == 0:return 0
+        right += self._size
+        for i in range(self._log, 0, -1):self._push((right - 1) >> i)
+        sm = self._e
+        first = True
+        while first or (right & -right) != right:
+            first = False
+            right -= 1
+            while right > 1 and (right % 2):right >>= 1
+            if not g(self._op(self._d[right], sm)):
+                while right < self._size:
+                    self._push(right)
+                    right = 2 * right + 1
+                    if g(self._op(self._d[right], sm)):
+                        sm = self._op(self._d[right], sm)
+                        right -= 1
+                return right + 1 - self._size
+            sm = self._op(self._d[right], sm)
+        return 0
+    # -------- internals --------
+    def _update(self, k: int) -> None:
+        self._d[k] = self._op(self._d[2 * k], self._d[2 * k + 1])
+    def _all_apply(self, k: int, f: Any) -> None:
+        self._d[k] = self._mapping(f, self._d[k])
+        if k < self._size:
+            self._lz[k] = self._composition(f, self._lz[k])
+    def _push(self, k: int) -> None:
+        self._all_apply(2 * k, self._lz[k])
+        self._all_apply(2 * k + 1, self._lz[k])
+        self._lz[k] = self._id
+        
+    # helper
+    def __len__(self) -> int:
+        return self._n
+    def __getitem__(self, i: int) -> Any:
+        # seg[i] で要素取得
+        return self.get(i)
+    def __setitem__(self, key: int, val: Any) -> None:
+        # seg[i] = x で要素更新
+        self.set(key, val)
+    def __iter__(self) -> Iterator[Any]:
+        # for x in seg で反復（各要素を遅延を解決して返す）
+        for i in range(self._n):
+            yield self.get(i)
+    def __str__(self) -> str:
+        # print(seg) で配列っぽく表示
+        return str(list(self))
+
+
+
+
+
+#1区間加算・区間最小値取得
+def op(ele1, ele2):
+    return min(ele1, ele2)
+def mapping(func, ele):
+    return func + ele
+def composition(func_upper, func_lower):
+    return func_upper + func_lower
+e = inf
+id_ = 0
+# TODO (初期リストlst)
+seg=LazySegTree(op,e,mapping,composition,id_,A)
+
+#2区間加算・区間最大値取得
+def op(ele1, ele2):
+    return max(ele1, ele2)
+def mapping(func, ele):
+    return func + ele
+def composition(func_upper, func_lower):
+    return func_upper + func_lower
+e = -inf
+id_ = 0
+# TODO (初期リストlst)
+seg=LazySegTree(op,e,mapping,composition,id_,A)
+
+#3区間加算・区間和取得
+# 値 S = (sum, len), 作用 F = add_value
+def op(a, b):
+    return (a[0] + b[0], a[1] + b[1])
+def mapping(f, a):
+    # 区間に +f： 和は f * len 増える、長さは不変
+    return (a[0] + f * a[1], a[1])
+def composition(f_new, f_old):
+    # 既にかかっている遅延f_oldに、新しい遅延f_newを重ねる（x ↦ f_new(f_old(x))）
+    return f_new + f_old
+e = (0, 0)
+id_ = 0
+# 初期化（A が元配列）
+V = [(x, 1) for x in A]
+seg = LazySegTree(op, e, mapping, composition, id_, V)
+
+#4区間変更・区間最小値取得
+ID = inf
+def op(ele1, ele2):
+    return min(ele1, ele2)
+def mapping(func, ele):
+    if func == ID:
+        return ele
+    else:
+        return func
+def composition(func_upper, func_lower):
+    if func_upper == ID:
+        return func_lower
+    else:
+        return func_upper
+e = inf
+id_ = ID
+# TODO (初期リストlst)
+seg=LazySegTree(op,e,mapping,composition,id_,A)
+
+#5区間変更・区間最大値取得
+ID = inf
+def op(ele1, ele2):
+    return max(ele1, ele2)
+def mapping(func, ele):
+    if func == ID:
+        return ele
+    else:
+        return func
+def composition(func_upper, func_lower):
+    if func_upper == ID:
+        return func_lower
+    else:
+        return func_upper
+e = -inf
+id_ = ID
+# TODO (初期リストlst)
+seg=LazySegTree(op,e,mapping,composition,id_,A)
+
+#6区間変更・区間和取得
+# 値 S = (sum, len), 作用 F = assign_value or None
+# 区間代入を1個のlazy作用として書きたいから、各ノードは「区間の和」と「区間の長さ」を持つ必要がある
+ID = None
+def op(a, b):
+    return (a[0] + b[0], a[1] + b[1])
+def mapping(f, a):
+    if f is ID:          # 無操作
+        return a
+    else:                # 代入：全要素を f に
+        return (f * a[1], a[1])
+def composition(f_upper, f_lower):
+    # 上位の代入があればそれが勝つ（より新しい命令を優先）
+    return f_lower if f_upper is ID else f_upper
+e = (0, 0)
+id_ = ID
+V = [(x, 1) for x in A]
+seg = LazySegTree(op, e, mapping, composition, id_, V)
+
+
+"""
+詳細な説明
+S #要素の型 
+F #操作の型
+S op(S a, S b) #区間取得
+S mapping(F f, S x) #操作fをxに作用させる
+F composition(F f, F g) #操作(lazy)に対して新しい操作を追加する f+g
+S e() #opの単位元
+F id() #mappingの恒等写像、mapping(id, a) = a
+
+
+区間加算・区間和を取る場合のmapping
+[1,5)にfを加えるとなると、4fを加算する必要があるので区間の幅をもつ必要がある
+
+区間変更の恒等写像
+lazyの値としてあり得ないような値を擬似的に恒等写像として扱う
+→S mapping(F f, S x):fがIDならそのままxを返し、そうでなければ区間内の値を全てfに変更
+→F composition(F f, F g):fがIDならgを返し、そうでなければfを返す（後からの操作で上書きされるので）
+"""

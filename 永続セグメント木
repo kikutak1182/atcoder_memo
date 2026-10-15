@@ -1,0 +1,85 @@
+class PersistentSegmentTree:
+    @staticmethod
+    def op(x, y):
+        return x + y
+
+    @staticmethod
+    def e():
+        return 0
+
+    def __init__(self, size):
+        QUERY_COUNT = 200000
+        MAX_NODES = 500000 + 20 * QUERY_COUNT
+        self.size = size
+
+        self.node_idx = 0
+        self.l = [-1] * MAX_NODES
+        self.r = [-1] * MAX_NODES
+        self.v = [self.e()] * MAX_NODES
+        self.root_idx = 0
+        self.roots = [-1] * (QUERY_COUNT + 1)
+
+        root = self.make_node(self.e())
+        self.roots[self.root_idx] = root
+        self.root_idx += 1
+        stack = [(root, 0, size)]
+        while stack:
+            x, l, r = stack.pop()
+            if l + 1 < r:
+                m = (l + r) // 2
+                self.l[x] = self.make_node(self.e())
+                self.r[x] = self.make_node(self.e())
+                stack.append((self.l[x], l, m))
+                stack.append((self.r[x], m, r))
+
+    def make_node(self, v):
+        self.v[self.node_idx] = v
+        self.node_idx += 1
+        return self.node_idx - 1
+
+    def merge(self, l, r):
+        self.l[self.node_idx] = l
+        self.r[self.node_idx] = r
+        self.v[self.node_idx] = self.op(self.v[l], self.v[r])
+        self.node_idx += 1
+        return self.node_idx - 1
+
+    def get_root(self):
+        return self.roots[self.root_idx - 1]
+
+    def set(self, root, p, v):
+        ls = []
+        x, l, r = root, 0, self.size
+        while l + 1 < r:
+            m = (l + r) // 2
+            if p < m:
+                ls.append((x, False))
+                x, r = self.l[x], m
+            else:
+                ls.append((x, True))
+                x, l = self.r[x], m
+        y = self.make_node(v)
+        for x, f in reversed(ls):
+            if not f:
+                y = self.merge(y, self.r[x])
+            else:
+                y = self.merge(self.l[x], y)
+        self.roots[self.root_idx] = y
+        self.root_idx += 1
+        return self.roots[self.root_idx - 1]
+
+    def prod(self, root, l, r):
+        res = self.e()
+        stack = [(root, 0, self.size)]
+        while stack:
+            node, xl, xr = stack.pop()
+            if l <= xl and xr <= r:
+                res = self.op(res, self.v[node])
+                continue
+            xm = (xl + xr) // 2
+            if xm < r:
+                stack.append((self.r[node], xm, xr))
+            if l < xm:
+                stack.append((self.l[node], xl, xm))
+        return res
+

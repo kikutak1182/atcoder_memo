@@ -1,0 +1,41 @@
+class UnionFindMerge:
+    def __init__(self, n):
+        self.n = n
+        self.parent = [-1] * n
+        self.members = [[i] for i in range(n)]
+
+    def find(self, x):
+        while self.parent[x] >= 0:
+            if self.parent[self.parent[x]] >= 0:
+                self.parent[x] = self.parent[self.parent[x]]
+            x = self.parent[x]
+        return x
+
+    def unite(self, x, y):
+        x = self.find(x)
+        y = self.find(y)
+        if x == y:
+            return x
+
+        if -self.parent[x] < -self.parent[y]:
+            x, y = y, x
+
+        self.parent[x] += self.parent[y]
+        self.parent[y] = x
+
+        if len(self.members[x]) < len(self.members[y]):
+            self.members[x], self.members[y] = self.members[y], self.members[x]
+
+        self.members[x].extend(self.members[y])
+        self.members[y].clear()
+
+        return x
+
+    def same(self, x, y):
+        return self.find(x) == self.find(y)
+
+    def size(self, x):
+        return -self.parent[self.find(x)]
+
+    def get_members(self, x):
+        return self.members[self.find(x)]

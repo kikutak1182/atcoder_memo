@@ -1,0 +1,15 @@
+def dijkstra(s):
+    hq = []
+    heappush(hq, (0, s))
+    cost = [inf] * N # 行ったことのないところはinf
+    cost[s] = A[0] # 開始地点は0
+    while hq:
+        c, v = heappop(hq)
+        if c > cost[v]: # コストが現在のコストよりも高ければスルー
+            continue
+        for d, u in G[v]: # d:辺のコスト u:next頂点
+            tmp = d + cost[v] + A[u]
+            if tmp < cost[u]:
+                cost[u] = tmp
+                heappush(hq, (tmp, u))
+    return cost
